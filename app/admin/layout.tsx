@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { href: "/admin/events", label: "Sự kiện" },
   { href: "/admin/reports", label: "Báo cáo" },
   { href: "/admin/settings", label: "Cài đặt", adminOnly: true },
+  { href: "/admin/change-password", label: "Đổi mật khẩu" },
 ];
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
@@ -46,7 +47,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
             "use server";
             await signOut({ redirectTo: "/login" });
           }}
-          className="p-2"
+          className="p-2 border-t border-gray-100"
         >
           <button
             type="submit"
