@@ -45,6 +45,8 @@ export async function authorizeCredentials(raw: unknown): Promise<NextAuthUser |
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  trustHost: true,
+  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || "htx369-super-secret-key-2026-membership",
   session: { strategy: "jwt" },
   pages: { signIn: "/login" },
   providers: [
