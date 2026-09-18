@@ -13,10 +13,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="vi">
-      <head>
-        <script src="https://cdn.tailwindcss.com"></script>
-      </head>
-      <body className="bg-slate-50 text-slate-900 antialiased">{children}</body>
+      <body className="bg-slate-950 text-slate-100 antialiased selection:bg-indigo-500 selection:text-white">
+        {children}
+      </body>
     </html>
   );
 }
