@@ -4,16 +4,23 @@ import type { OrganizationFormInput } from "@/schemas/organization";
 
 export async function getOrganization() {
   const actor = await requireScope("organization:view");
-  return prisma.organization.findUniqueOrThrow({ where: { id: actor.organizationId } });
+  if (actor.organizationId) {
+    const org = await prisma.organization.findUnique({ where: { id: actor.organizationId } });
+    if (org) return org;
+  }
+  return prisma.organization.findFirst();
 }
 
 export async function updateOrganization(input: OrganizationFormInput) {
   const actor = await requireScope("organization:update");
 
   return prisma.$transaction(async (tx) => {
-    const existing = await tx.organization.findUniqueOrThrow({ where: { id: actor.organizationId } });
+    const existing = await prisma.organization.findFirst();
+    const orgId = actor.organizationId || existing?.id;
+    if (!orgId) throw new Error("Không tìm thấy tổ chức.");
+
     const updated = await tx.organization.update({
-      where: { id: actor.organizationId },
+      where: { id: orgId },
       data: {
         name: input.name,
         logoUrl: input.logoUrl || null,
@@ -30,7 +37,7 @@ export async function updateOrganization(input: OrganizationFormInput) {
         action: "UPDATE",
         entity: "Organization",
         entityId: updated.id,
-        oldValue: existing,
+        oldValue: existing || {},
         newValue: updated,
       },
     });
