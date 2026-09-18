@@ -1,0 +1,461 @@
+// ============================================================
+// Membership & Networking Management Platform — Prisma Schema
+// Phase 2 — Database
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ------------------------------------------------------------
+// ENUMS
+// ------------------------------------------------------------
+
+enum SystemRole {
+  SUPER_ADMIN
+  ADMIN
+  REGIONAL_LEADER
+  CHAPTER_LEADER
+  MEMBER
+}
+
+enum MemberStatus {
+  ACTIVE
+  SUSPENDED
+  LEFT
+}
+
+enum GuestStatus {
+  REGISTERED
+  CONFIRMED
+  ATTENDED
+  NO_SHOW
+  FOLLOW_UP
+  JOINED
+}
+
+enum EventStatus {
+  DRAFT
+  UPCOMING
+  ONGOING
+  COMPLETED
+  CANCELLED
+}
+
+enum TerritoryLeaderTitle {
+  PRESIDENT
+  DEPUTY
+}
+
+enum ChapterLeaderTitle {
+  PRESIDENT
+  VICE_PRESIDENT
+  SECRETARY
+  MEMBERSHIP
+  VISITOR_COORDINATOR
+  OTHER
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  CHECK_IN
+  CONVERT_GUEST
+  ROLE_CHANGE
+}
+
+enum NotificationType {
+  GUEST_REGISTERED
+  GUEST_CHECKED_IN
+  EVENT_REMINDER
+  GUEST_NEEDS_FOLLOWUP
+  SYSTEM
+}
+
+// ------------------------------------------------------------
+// ORGANIZATION
+// ------------------------------------------------------------
+
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  logoUrl     String?
+  description String?
+  email       String?
+  phone       String?
+  website     String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  territories Territory[]
+  events      Event[]
+  users       User[]
+
+  @@index([isActive])
+}
+
+// ------------------------------------------------------------
+// TERRITORY
+// ------------------------------------------------------------
+
+model Territory {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  code           String   @unique
+  description    String?
+  foundedAt      DateTime?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization       @relation(fields: [organizationId], references: [id])
+  leaders      TerritoryLeader[]
+  chapters     Chapter[]
+  members      Member[]
+  guests       Guest[]
+  events       Event[]
+
+  @@index([organizationId])
+  @@index([isActive])
+}
+
+model TerritoryLeader {
+  id          String               @id @default(cuid())
+  territoryId String
+  userId      String
+  title       TerritoryLeaderTitle
+  startedAt   DateTime             @default(now())
+  endedAt     DateTime?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  territory Territory @relation(fields: [territoryId], references: [id])
+  user      User      @relation(fields: [userId], references: [id])
+
+  @@index([territoryId])
+  @@index([userId])
+}
+
+// ------------------------------------------------------------
+// CHAPTER
+// ------------------------------------------------------------
+
+model Chapter {
+  id               String   @id @default(cuid())
+  territoryId      String
+  name             String
+  code             String   @unique
+  description      String?
+  meetingLocation  String?
+  meetingSchedule  String?
+  foundedAt        DateTime?
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  territory Territory        @relation(fields: [territoryId], references: [id])
+  leaders   ChapterLeader[]
+  members   Member[]
+  guests    Guest[]
+  events    Event[]
+
+  @@index([territoryId])
+  @@index([isActive])
+}
+
+model ChapterLeader {
+  id        String             @id @default(cuid())
+  chapterId String
+  userId    String
+  title     ChapterLeaderTitle
+  startedAt DateTime           @default(now())
+  endedAt   DateTime?
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  chapter Chapter @relation(fields: [chapterId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@index([chapterId])
+  @@index([userId])
+}
+
+// ------------------------------------------------------------
+// USER / AUTH / RBAC
+// ------------------------------------------------------------
+
+model User {
+  id             String     @id @default(cuid())
+  organizationId String
+  email          String     @unique
+  passwordHash   String
+  fullName       String
+  avatarUrl      String?
+  role           SystemRole @default(MEMBER)
+  isActive       Boolean    @default(true)
+  lastLoginAt    DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  organization      Organization      @relation(fields: [organizationId], references: [id])
+  member             Member?
+  territoryLeaderOf  TerritoryLeader[]
+  chapterLeaderOf    ChapterLeader[]
+  notifications      Notification[]
+  auditLogs          AuditLog[]
+
+  @@index([organizationId])
+  @@index([email])
+  @@index([role])
+}
+
+// Permission bảng phụ trợ — dùng khi cần permission override ngoài SystemRole mặc định
+model Permission {
+  id     String @id @default(cuid())
+  code   String @unique // ex: "territory:create", "event:checkin"
+  label  String
+
+  @@index([code])
+}
+
+// ------------------------------------------------------------
+// INDUSTRY (danh mục dùng chung cho Member/Guest)
+// ------------------------------------------------------------
+
+model Industry {
+  id   String @id @default(cuid())
+  name String @unique
+
+  members Member[]
+  guests  Guest[]
+}
+
+// ------------------------------------------------------------
+// MEMBER
+// ------------------------------------------------------------
+
+model Member {
+  id          String       @id @default(cuid())
+  userId      String?      @unique
+  territoryId String
+  chapterId   String
+  industryId  String?
+  memberCode  String       @unique
+  fullName    String
+  avatarUrl   String?
+  email       String       @unique
+  phone       String       @unique
+  company     String?
+  position    String?
+  joinedAt    DateTime     @default(now())
+  status      MemberStatus @default(ACTIVE)
+  referrerId  String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  deletedAt   DateTime?
+
+  user      User?     @relation(fields: [userId], references: [id])
+  territory Territory @relation(fields: [territoryId], references: [id])
+  chapter   Chapter   @relation(fields: [chapterId], references: [id])
+  industry  Industry? @relation(fields: [industryId], references: [id])
+  referrer  Member?   @relation("MemberReferral", fields: [referrerId], references: [id])
+  referrals Member[]  @relation("MemberReferral")
+
+  guestInvitationsSent GuestInvitation[]
+  convertedFromGuest   Guest?            @relation("GuestConvertedToMember")
+  referredGuests       Guest[]           @relation("MemberReferredGuests")
+  eventRegistrations   EventRegistration[]
+
+  @@index([territoryId])
+  @@index([chapterId])
+  @@index([status])
+  @@index([email])
+  @@index([phone])
+  @@index([createdAt])
+}
+
+// ------------------------------------------------------------
+// GUEST
+// ------------------------------------------------------------
+
+model Guest {
+  id             String      @id @default(cuid())
+  territoryId    String?
+  chapterId      String?
+  industryId     String?
+  referrerMemberId String?
+  fullName       String
+  phone          String
+  email          String?
+  company        String?
+  position       String?
+  source         String?     // ex: "member_referral", "website", "walk_in"
+  notes          String?
+  status         GuestStatus @default(REGISTERED)
+  convertedMemberId String?  @unique
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  territory      Territory? @relation(fields: [territoryId], references: [id])
+  chapter        Chapter?   @relation(fields: [chapterId], references: [id])
+  industry       Industry?  @relation(fields: [industryId], references: [id])
+  referrerMember Member?    @relation("MemberReferredGuests", fields: [referrerMemberId], references: [id])
+  convertedMember Member?   @relation("GuestConvertedToMember", fields: [convertedMemberId], references: [id])
+
+  invitations    GuestInvitation[]
+  registrations  EventRegistration[]
+
+  @@index([territoryId])
+  @@index([chapterId])
+  @@index([status])
+  @@index([phone])
+  @@index([email])
+  @@index([createdAt])
+}
+
+model GuestInvitation {
+  id        String   @id @default(cuid())
+  guestId   String
+  memberId  String
+  eventId   String?
+  message   String?
+  createdAt DateTime @default(now())
+
+  guest  Guest  @relation(fields: [guestId], references: [id])
+  member Member @relation(fields: [memberId], references: [id])
+  event  Event? @relation(fields: [eventId], references: [id])
+
+  @@index([guestId])
+  @@index([memberId])
+  @@index([eventId])
+}
+
+// ------------------------------------------------------------
+// EVENT
+// ------------------------------------------------------------
+
+model Event {
+  id                  String      @id @default(cuid())
+  organizationId      String
+  territoryId         String?
+  chapterId           String?
+  title               String
+  slug                String      @unique
+  description         String?
+  startAt             DateTime
+  endAt               DateTime
+  location            String?
+  organizerUserId     String?
+  capacity             Int?
+  status              EventStatus @default(DRAFT)
+  registrationEnabled Boolean     @default(true)
+  qrToken             String      @unique @default(cuid())
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  territory    Territory?   @relation(fields: [territoryId], references: [id])
+  chapter      Chapter?     @relation(fields: [chapterId], references: [id])
+
+  invitations   GuestInvitation[]
+  registrations EventRegistration[]
+  checkIns      EventCheckIn[]
+
+  @@index([organizationId])
+  @@index([territoryId])
+  @@index([chapterId])
+  @@index([status])
+  @@index([startAt])
+  @@index([slug])
+}
+
+model EventRegistration {
+  id         String   @id @default(cuid())
+  eventId    String
+  guestId    String?
+  memberId   String?
+  fullName   String
+  phone      String
+  email      String?
+  company    String?
+  position   String?
+  industry   String?
+  referrer   String?
+  code       String   @unique // mã đăng ký hiển thị cho khách (ví dụ REG-000123)
+  createdAt  DateTime @default(now())
+
+  event  Event   @relation(fields: [eventId], references: [id])
+  guest  Guest?  @relation(fields: [guestId], references: [id])
+  member Member? @relation(fields: [memberId], references: [id])
+  checkIn EventCheckIn?
+
+  @@index([eventId])
+  @@index([guestId])
+  @@index([memberId])
+  @@index([createdAt])
+}
+
+model EventCheckIn {
+  id             String   @id @default(cuid())
+  eventId        String
+  registrationId String   @unique
+  checkedInAt    DateTime @default(now())
+
+  event        Event              @relation(fields: [eventId], references: [id])
+  registration EventRegistration  @relation(fields: [registrationId], references: [id])
+
+  @@index([eventId])
+  @@unique([eventId, registrationId], name: "uniq_event_registration_checkin")
+}
+
+// ------------------------------------------------------------
+// NOTIFICATION
+// ------------------------------------------------------------
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String
+  isRead    Boolean          @default(false)
+  link      String?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+// ------------------------------------------------------------
+// AUDIT LOG
+// ------------------------------------------------------------
+
+model AuditLog {
+  id        String      @id @default(cuid())
+  userId    String?
+  action    AuditAction
+  entity    String      // ex: "Member", "Event", "Guest"
+  entityId  String
+  oldValue  Json?
+  newValue  Json?
+  createdAt DateTime    @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([entity, entityId])
+  @@index([action])
+  @@index([createdAt])
+}
